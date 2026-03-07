@@ -9,3 +9,5 @@ pub mod logger;
 pub mod test_page;
 
 pub use adb_operator::AdbOperator;
+pub use pages::{SpecialEventPage, SpecialEventType};
+pub use reroll_task::detect_special_event_from_image;

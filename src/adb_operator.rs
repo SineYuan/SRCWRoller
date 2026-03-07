@@ -406,6 +406,12 @@ impl AdbOperator {
     }
 
     pub fn screenshot_in_region(&self, region: &Region) -> Result<DynamicImage, Box<dyn std::error::Error>> {
+        // 如果 region 是全屏，直接返回截图
+        if region.left == 0 && region.top == 0 
+            && region.width == self.width && region.height == self.height {
+            return self.screenshot();
+        }
+        
         let full_img = self.screenshot()?;
         let cropped = full_img.crop_imm(
             region.left as u32,

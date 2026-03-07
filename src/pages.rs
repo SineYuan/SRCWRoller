@@ -857,6 +857,14 @@ impl<'a> PageDetector<'a> {
             None
         }
     }
+
+    pub fn detect_special_event_page(&self) -> Option<SpecialEventPage> {
+        if let Some(ref screenshot) = self.screenshot {
+            SpecialEventPage::detect(screenshot, self.operator)
+        } else {
+            None
+        }
+    }
 }
 
 // 投资环境页面命令处理函数
@@ -974,3 +982,128 @@ crate::define_page_commands!(InvestStrategyPage {
     strategies : "strategies - 显示所有投资策略" => strategy_commands::strategies,
     refresh_count : "refresh_count - 显示刷新次数" => strategy_commands::refresh_count
 });
+
+// ========================================
+// SpecialEventPage - 特殊事件页面
+// ========================================
+// 用于检测和处理游戏中的特殊事件，如：
+// - 盛会之星：选择角色成为巨星
+// - 命运卜者：选择式形态
+
+/// 特殊事件类型
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum SpecialEventType {
+    /// 盛会之星
+    Festivities,
+    /// 命运卜者
+    FortuneTeller,
+}
+
+/// OCR 识别区域：屏幕顶部中间
+const SPECIAL_EVENT_OCR_REGION: (f32, f32, f32, f32) = (0.35, 0.08, 0.65, 0.18);
+
+#[derive(Clone)]
+pub struct SpecialEventPage {
+    pub event_type: Option<SpecialEventType>,
+    pub title_text: String,
+    pub detected: bool,
+}
+
+impl SpecialEventPage {
+    pub fn new() -> Self {
+        Self {
+            event_type: None,
+            title_text: String::new(),
+            detected: false,
+        }
+    }
+
+    /// 检测特殊事件类型（静态方法，和其他 Page 一致）
+    pub fn detect(screenshot: &DynamicImage, operator: &AdbOperator) -> Option<Self> {
+        let width = operator.get_width();
+        let height = operator.get_height();
+
+        // 计算 OCR 区域
+        let left = (SPECIAL_EVENT_OCR_REGION.0 * width as f32) as i32;
+        let top = (SPECIAL_EVENT_OCR_REGION.1 * height as f32) as i32;
+        let right = (SPECIAL_EVENT_OCR_REGION.2 * width as f32) as i32;
+        let bottom = (SPECIAL_EVENT_OCR_REGION.3 * height as f32) as i32;
+
+        let region = Region::new(left, top, right - left, bottom - top);
+
+        // 执行 OCR
+        let ocr_results = match operator.ocr_on_image(screenshot, &region) {
+            Ok(results) => results,
+            Err(e) => {
+                warn!("SpecialEventPage OCR 失败：{}", e);
+                return None;
+            }
+        };
+
+        // 检测关键字
+        for result in &ocr_results {
+            let text = &result.text;
+
+            // 检测"盛会之星"
+            if text.contains("盛会之星") || text.contains("盛会") {
+                info!("OCR 检测到盛会之星：'{}' (置信度：{:.2})", text, result.confidence);
+                return Some(Self {
+                    event_type: Some(SpecialEventType::Festivities),
+                    title_text: text.clone(),
+                    detected: true,
+                });
+            }
+
+            // 检测"命运卜者"
+            if text.contains("命运卜者") || text.contains("命运") || text.contains("卜者") {
+                info!("OCR 检测到命运卜者：'{}' (置信度：{:.2})", text, result.confidence);
+                return Some(Self {
+                    event_type: Some(SpecialEventType::FortuneTeller),
+                    title_text: text.clone(),
+                    detected: true,
+                });
+            }
+        }
+
+        None
+    }
+
+    /// 处理特殊事件，自动点击选项
+    pub fn handle_event(&self, operator: &AdbOperator) -> Result<bool, Box<dyn std::error::Error>> {
+        match self.event_type {
+            Some(SpecialEventType::Festivities) => {
+                // 盛会之星：选择第一个选项，然后确认
+                info!("处理盛会之星事件：选择第一个选项");
+                operator.click_point(0.5, 0.35, 0.5)?;  // 第一个选项
+                operator.click_point(0.77, 0.62, 1.0)?;  // 确认
+                Ok(true)
+            }
+            Some(SpecialEventType::FortuneTeller) => {
+                // 命运卜者：选择第三个选项，然后确认
+                info!("处理命运卜者事件：选择第三个选项");
+                operator.click_point(0.8, 0.35, 0.5)?;  // 第三个选项
+                operator.click_point(0.77, 0.521, 1.0)?;  // 确认
+                Ok(true)
+            }
+            None => {
+                warn!("没有检测到特殊事件，无需处理");
+                Ok(false)
+            }
+        }
+    }
+
+    /// 获取事件描述
+    pub fn get_event_name(&self) -> &str {
+        match self.event_type {
+            Some(SpecialEventType::Festivities) => "盛会之星",
+            Some(SpecialEventType::FortuneTeller) => "命运卜者",
+            None => "未检测到事件",
+        }
+    }
+}
+
+impl Default for SpecialEventPage {
+    fn default() -> Self {
+        Self::new()
+    }
+}

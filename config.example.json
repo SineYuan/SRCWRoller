@@ -37,9 +37,9 @@
   "debug": false,
   "ocr": {
     "models_dir": "./models",
-    "det_model": "PP-OCRv5_mobile_det.mnn",
-    "rec_model": "PP-OCRv5_mobile_rec.mnn",
-    "keys_file": "ppocr_keys_v5.txt"
+    "det_model": "ch_PP-OCRv4_det_infer.mnn",
+    "rec_model": "ch_PP-OCRv4_rec_infer.mnn",
+    "keys_file": "ppocr_keys_v4.txt"
   },
   "settings": {}
 }

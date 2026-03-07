@@ -76,22 +76,7 @@ macro_rules! define_page_commands {
 }
 
 pub fn get_page_names() -> Vec<&'static str> {
-    vec![
-        "StartPage",
-        "GameModePage",
-        "DifficultyPage",
-        "BossAffixPage",
-        "PlaneSelectPage",
-        "InvestEnvironmentPage",
-        "PreparationPage",
-        "ShopPage",
-        "InvestStrategyPage",
-        "ExitConfirmDialog",
-        "ExitChallengeFailPage",
-        "ExitStatsPage",
-        "ExitReturnPage",
-        "BattleSettlementPage",
-    ]
+    PAGES.iter().map(|p| p.name).collect()
 }
 
 /// 页面信息结构体
@@ -116,6 +101,7 @@ pub const PAGES: &[PageDefinition] = &[
     PageDefinition { name: "ExitStatsPage", keywords: &["统计", "数据"] },
     PageDefinition { name: "ExitReturnPage", keywords: &["返回", "退出"] },
     PageDefinition { name: "BattleSettlementPage", keywords: &["战斗", "结算"] },
+    PageDefinition { name: "SpecialEventPage", keywords: &["盛会之星", "命运卜者"] },
 ];
 
 /// 截图模式下的页面检测器
@@ -278,10 +264,10 @@ pub fn test_with_adb(
 
 fn test_all_pages(operator: &mut AdbOperator) {
     info!("\n依次检测所有页面类:");
-    
+
     let mut detector = PageDetector::new(operator);
     let _ = detector.refresh();
-    
+
     let results: Vec<(&str, bool)> = vec![
         ("StartPage", detector.detect_start_page().is_some()),
         ("GameModePage", detector.detect_game_mode_page().is_some()),
@@ -297,12 +283,13 @@ fn test_all_pages(operator: &mut AdbOperator) {
         ("ExitStatsPage", detector.detect_exit_stats_page().is_some()),
         ("ExitReturnPage", detector.detect_exit_return_page().is_some()),
         ("BattleSettlementPage", detector.detect_battle_settlement_page().is_some()),
+        ("SpecialEventPage", detector.detect_special_event_page().is_some()),
     ];
-    
+
     for (name, matched) in &results {
         info!("  {} - {}", if *matched { "✓ 匹配" } else { "✗ 不匹配" }, name);
     }
-    
+
     info!("\n==================================================");
 }
 

@@ -1,8 +1,10 @@
 use crate::adb_operator::AdbOperator;
+use crate::adb_operator::Region;
 use crate::pages::{
     BattleSettlementPage, BossAffixPage, DifficultyPage, ExitChallengeFailPage,
     ExitConfirmDialog, ExitReturnPage, ExitStatsPage, GameModePage, InvestEnvironmentPage,
     InvestStrategyPage, PageDetector, PlaneSelectPage, PreparationPage, ShopPage,
+    SpecialEventPage, SpecialEventType,
 };
 use crate::selection_manager::{OpeningConfig, SelectionManager};
 use crate::logger::{info, debug, warn, error};
@@ -27,6 +29,25 @@ const IN_HAND_AREA: [(f32, f32); 9] = [
 const ON_FIELD_AREA: [(f32, f32); 4] = [
     (0.386, 0.365), (0.464, 0.365), (0.536, 0.365), (0.611, 0.365),
 ];
+
+/// 使用模板匹配检测特殊事件（旧方法，保留用于兼容）
+/// 盛会之星：模板匹配 ThePlanetOfFestivities.png
+/// 命运卜者：模板匹配 FortuneTeller.png
+pub fn detect_special_event_from_image(operator: &AdbOperator) -> Result<Option<SpecialEventType>, Box<dyn std::error::Error>> {
+    let (event, _box) = operator.locate_any(&[
+        "ThePlanetOfFestivities.png",
+        "FortuneTeller.png",
+    ])?;
+
+    if event == 0 {
+        return Ok(Some(SpecialEventType::Festivities));
+    }
+    if event == 1 {
+        return Ok(Some(SpecialEventType::FortuneTeller));
+    }
+
+    Ok(None)
+}
 
 impl<'a> AndroidRerollStart<'a> {
     pub fn new(
@@ -498,6 +519,7 @@ impl<'a> AndroidRerollStart<'a> {
             self.operator.drag_to(hand_pos.0, hand_pos.1, field_pos.0, field_pos.1)?;
             AdbOperator::sleep(0.5);
 
+            // 每次拖动后检查特殊事件（和 Python 一致）
             debug!("检查特殊事件...");
             self.handle_special_events2()?;
         }
@@ -672,79 +694,63 @@ impl<'a> AndroidRerollStart<'a> {
     }
 
     fn handle_special_events(&self) -> Result<(), Box<dyn std::error::Error>> {
-        // 使用 wait_any_img 等待特殊事件出现（最多3秒，每0.5秒检测一次）
-        let (event, _box_) = self.operator.wait_any_img(&[
-            "ThePlanetOfFestivities.png",
-            "FortuneTeller.png",
-        ], 3.0, 0.5)?;
+        // 和 Python 版本一致：循环 5 次，单次检测
+        for _ in 0..5 {
+            // 检测盛会之星或命运卜者事件
+            let (event, _box_) = self.operator.locate_any(&[
+                "ThePlanetOfFestivities.png",
+                "FortuneTeller.png",
+            ])?;
 
-        if event == 0 {
-            info!("检测到盛会之星事件，选择第一个选项...");
-            self.operator.click_point(0.5, 0.35, 1.0)?;
-            self.operator.click_point(0.77, 0.62, 1.0)?;
-            // 处理完一个事件后，递归调用以检测是否有更多事件
-            return self.handle_special_events();
-        }
+            if event == 0 {
+                // 盛会之星事件
+                info!("检测到盛会之星事件，选择第一个选项...");
+                self.operator.click_point(0.5, 0.35, 1.0)?;
+                self.operator.click_point(0.77, 0.62, 1.0)?;
+                // 继续检查是否还有事件
+                continue;
+            }
 
-        if event == 1 {
-            info!("检测到命运卜者事件，选择第三个选项...");
-            self.operator.click_point(0.8, 0.35, 1.0)?;
-            self.operator.click_point(0.77, 0.521, 1.0)?;
-            // 处理完一个事件后，递归调用以检测是否有更多事件
-            return self.handle_special_events();
+            if event == 1 {
+                // 命运卜者事件
+                info!("检测到命运卜者事件，选择第三个选项...");
+                self.operator.click_point(0.8, 0.35, 1.0)?;
+                self.operator.click_point(0.77, 0.521, 1.0)?;
+                // 继续检查是否还有事件
+                continue;
+            }
+
+            // 未检测到事件，退出循环
+            break;
         }
 
         info!("特殊事件处理完成");
         Ok(())
     }
 
-    /// 使用 OCR + 模板匹配识别特殊事件
-    /// 盛会之星: OCR 识别 "请选择1名角色成为巨星" 文字
-    /// 命运卜者: 模板匹配 FortuneTeller.png
+    /// 使用 OCR 识别特殊事件
+    /// 盛会之星：OCR 识别顶部中间区域的"盛会之星"标题
+    /// 命运卜者：OCR 识别顶部中间区域的"命运卜者"标题
     fn handle_special_events2(&self) -> Result<(), Box<dyn std::error::Error>> {
-        use crate::adb_operator::Region;
-        
-        // 定义 OCR 识别区域（小区域以提高速度）
-        let ocr_region = Region {
-            left: (0.45 * self.operator.get_width() as f32) as i32,
-            top: (0.11 * self.operator.get_height() as f32) as i32,
-            width: (0.20 * self.operator.get_width() as f32) as i32,
-            height: (0.05 * self.operator.get_height() as f32) as i32,
-        };
-        
-        info!("使用 OCR+模板匹配 检测特殊事件");
-        
-        // 最多检测3秒，每0.5秒检测一次
-        let start = std::time::Instant::now();
-        while start.elapsed().as_secs_f32() < 1.5 {
-            // 1. 先用 OCR 检测盛会之星
-            let ocr_result = self.operator.ocr_in_region(&ocr_region)?;
-            let has_festivity_event = ocr_result.iter().any(|r| {
-                r.text.contains("请选择") || r.text.contains("成为巨星")
-            });
-            
-            if has_festivity_event {
-                info!("OCR 检测到盛会之星事件，选择第一个选项...");
-                self.operator.click_point(0.5, 0.35, 1.0)?;
-                self.operator.click_point(0.77, 0.62, 1.0)?;
-                // 处理完一个事件后，递归调用以检测是否有更多事件
-                return self.handle_special_events2();
+        info!("使用 SpecialEventPage 检测特殊事件");
+
+        // 最多尝试 5 次（和 Python 一致）
+        for _ in 0..5 {
+            // 使用 SpecialEventPage 检测特殊事件
+            // 需要截图才能检测
+            let screenshot = self.operator.screenshot()?;
+            if let Some(event_page) = SpecialEventPage::detect(&screenshot, self.operator) {
+                // 检测到事件，处理它
+                event_page.handle_event(self.operator)?;
+                // 继续检查是否还有事件
+                continue;
+            } else {
+                // 未检测到事件，退出循环
+                break;
             }
-            
-            // 2. 用模板匹配检测命运卜者
-            if let Some(_box) = self.operator.locate("FortuneTeller.png")? {
-                info!("模板匹配检测到命运卜者事件，选择第三个选项...");
-                self.operator.click_point(0.8, 0.35, 1.0)?;
-                self.operator.click_point(0.77, 0.521, 1.0)?;
-                // 处理完一个事件后，递归调用以检测是否有更多事件
-                return self.handle_special_events2();
-            }
-            
-            // 等待0.5秒后重试
-            std::thread::sleep(std::time::Duration::from_millis(500));
         }
-        
-        info!("未检测到特殊事件");
+
+        info!("特殊事件处理完成");
         Ok(())
     }
 
