@@ -1,0 +1,35 @@
+max_retry: 500
+prefer_env:
+  - 彩虹时代
+  - 头彩
+  - 蓝海
+  - 特权阶级
+  - 佩佩
+  - 夜之半神邀请
+openings:
+  - env: 
+      - 专家研讨会
+      - 特邀专家
+    strategy:
+      - 快请专家
+      - 摸个鱼吧
+      - 加拉赫
+      - 停云
+      - 青雀
+    affix: []
+  - env: []
+    strategy:
+      - 轮回不止
+    affix:
+      - 变宝为废
+device_serial: null
+confidence: 0.7
+click_sleep: 0.5
+page_timeout: 10
+debug: false
+ocr:
+  models_dir: ./models
+  det_model: ch_PP-OCRv4_det_infer.mnn
+  rec_model: ch_PP-OCRv4_rec_infer.mnn
+  keys_file: ppocr_keys_v4.txt
+settings: {}

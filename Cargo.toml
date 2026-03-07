@@ -1,0 +1,26 @@
+[package]
+name = "srcwroller"
+version = "0.1.0"
+edition = "2021"
+description = "Star Rail Currency Wars Auto Roller - 星穹铁道货币战争自动刷开局工具"
+authors = ["SineYuan"]
+license = "MIT"
+repository = "https://github.com/SineYuan/SRCWRoller"
+
+[dependencies]
+ocr-rs = { version = "2.0.2" }
+opencv = { version = "0.98", default-features = false, features = ["clang-runtime", "imgproc", "imgcodecs"] }
+image = "0.25"
+imageproc = "0.25"
+radb = "0.1"
+log = "0.4"
+chrono = "0.4"
+rand = "0.8"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.9"
+rust-embed = "8.0"
+
+[profile.release]
+opt-level = 3
+lto = true
