@@ -451,8 +451,19 @@ impl<'a> AndroidRerollStart<'a> {
 
         let (env_index, env_name, reason) = self.selector.select_env(&env_names, true, false);
 
-        if reason == "random" && self.selector.has_wanted_envs() {
-            info!("未匹配到目标环境，尝试刷新...");
+        // 检查是否有刷新需求（目标环境 或 偏好环境 未匹配到）
+        let should_refresh = if reason == "random" {
+            // 有目标环境但未匹配到
+            let has_target = self.selector.has_wanted_envs();
+            // 有偏好环境但未匹配到
+            let has_prefer = !self.selector.prefer_env.is_empty();
+            has_target || has_prefer
+        } else {
+            false
+        };
+
+        if should_refresh {
+            info!("未匹配到目标/偏好环境，尝试刷新...");
             self.save_opening_screenshot("InvestEnvironmentPage", "before_refresh");
             page.click_refresh(self.operator);
             AdbOperator::sleep(2.0);
